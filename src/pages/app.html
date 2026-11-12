@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shopping Shortlist</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: sticky totals bar, add form, then one ranked list with a draggable buying line. */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --fg: #17212b;
+  --muted: #5d6b78;
+  --line: #dde3e8;
+  --accent: #0d7a6a;
+  --accent-fg: #ffffff;
+  --accent-soft: #d9f0eb;
+  --danger: #b42318;
+  --shadow: 0 8px 24px rgba(23, 33, 43, .18);
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11181e; --surface: #1a232b; --fg: #e8eef2; --muted: #93a3b0; --line: #2c3945;
+    --accent: #3cc4ae; --accent-fg: #07211c; --accent-soft: #15332e; --danger: #f87171;
+    --shadow: 0 8px 24px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 760px; margin: 0 auto; }
+h1 { font-family: var(--font-head); font-size: 26px; margin: 24px 0 4px; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.totals {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.totals .big { font-family: var(--font-head); font-size: 30px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.totals .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: block; }
+.totals .num { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 17px; }
+.totals .grow { flex: 1; }
+.status { font-size: 12px; color: var(--muted); }
+form.add {
+  margin: 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+}
+form.add .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+form.add .f.s3 { grid-column: span 3; } form.add .f.s6 { grid-column: span 6; }
+label { font-size: 12px; font-weight: 500; color: var(--muted); }
+input {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 10px; min-width: 0; width: 100%;
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.actions { display: flex; flex-direction: row !important; gap: 8px; align-items: center; }
+button {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 9px 16px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.ghost { border-color: transparent; color: var(--muted); padding: 6px 8px; font-weight: 500; font-size: 13px; background: transparent; }
+button.ghost:hover { color: var(--fg); background: var(--bg); }
+button.ghost.del:hover { color: var(--danger); }
+button:disabled { opacity: .35; cursor: default; }
+.hint { color: var(--muted); font-size: 13px; margin: 24px 0 8px; }
+ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+li.item {
+  position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 4px;
+  display: grid; grid-template-columns: 36px 1fr auto; gap: 2px 10px; align-items: center;
+}
+li.item.on { border-color: var(--accent); background: var(--accent-soft); }
+li.item.dragging { z-index: 20; box-shadow: var(--shadow); opacity: .96; pointer-events: none; }
+li.item.drop-before::before, li.item.drop-after::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--accent);
+}
+li.item.drop-before::before { top: -6px; }
+li.item.drop-after::after { bottom: -6px; }
+li.item.cut {
+  background: var(--accent); color: var(--accent-fg); border-color: var(--accent); padding-block: 8px;
+  grid-template-columns: 36px 1fr auto;
+}
+li.item.cut .handle { color: var(--accent-fg); }
+li.item.cut .handle:hover { background: rgba(255, 255, 255, .18); color: var(--accent-fg); }
+li.item.cut button.ghost { color: var(--accent-fg); }
+li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: var(--accent-fg); }
+.cut-label { font-weight: 600; min-width: 0; }
+.cut-label small { display: block; font-weight: 400; opacity: .9; font-size: 12px; }
+.handle {
+  width: 36px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--muted);
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; border-radius: 6px; border: 0; background: none; padding: 0;
+}
+.handle:hover { color: var(--fg); background: var(--bg); }
+.handle:active { cursor: grabbing; }
+.handle svg { width: 16px; height: 16px; fill: currentColor; }
+.name { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.rank { font-family: var(--font-head); font-weight: 700; color: var(--accent); margin-right: 8px; font-variant-numeric: tabular-nums; }
+.meta { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; grid-column: 2; min-width: 0; }
+.meta a { color: var(--accent); }
+.price { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.price small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.row-actions { grid-column: 2 / 4; display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.empty { text-align: center; color: var(--muted); padding: 32px 16px; border: 1px dashed var(--line); border-radius: 10px; margin-top: 16px; }
+.empty button { margin-top: 10px; }
+@media (max-width: 560px) {
+  form.add { grid-template-columns: repeat(2, 1fr); }
+  form.add .f.s3 { grid-column: span 1; }
+  form.add .f.s6 { grid-column: span 2; }
+  .totals .big { font-size: 26px; }
+}
+@media (prefers-reduced-motion: no-preference) { li.item { transition: background .15s, border-color .15s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Shopping Shortlist</h1>
+  <p class="sub">Rank what you want by dragging items. Drag the green buying line: everything above it is what you will buy.</p>
+
+  <div class="totals" aria-live="polite">
+    <div><span class="lbl">Buying total</span><span class="big" id="tBuy">$0.00</span></div>
+    <div><span class="lbl">Items above the line</span><span class="num" id="tCount">0</span></div>
+    <div><span class="lbl">Whole list</span><span class="num" id="tAll">$0.00</span></div>
+    <div class="grow"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <form class="add" id="form" autocomplete="off">
+    <div class="f s6"><label for="fName">Item</label><input id="fName" required maxlength="120" placeholder="e.g. Noise-cancelling headphones"></div>
+    <div class="f s3"><label for="fPrice">Price ($)</label><input id="fPrice" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+    <div class="f s3"><label for="fQty">Qty</label><input id="fQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+    <div class="f s3"><label for="fStore">Where to get it</label><input id="fStore" maxlength="80" placeholder="Store or website"></div>
+    <div class="f s3"><label for="fUrl">Link (optional)</label><input id="fUrl" type="url" placeholder="https://"></div>
+    <div class="f s6"><label for="fNotes">Notes (optional)</label><input id="fNotes" maxlength="200" placeholder="Size, colour, model number"></div>
+    <div class="f s6 actions"><button class="primary" id="fSubmit" type="submit">Add to bottom of list</button><button type="button" id="fCancel" hidden>Cancel edit</button></div>
+  </form>
+
+  <div class="hint">Drag the grip to rank. #1 is most wanted.</div>
+  <div id="list"></div>
+</div>
+
+<script>
+(function () {
+  var KEY = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "");
+  var API = "/api/" + encodeURIComponent(KEY);
+  var rev = -1, pending = 0;
+  var items = [];            // item docs plus at most one {id:"cutline", kind:"line", rank}
+  var editingId = null, drag = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+  var GRIP = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>';
+  var LINE_ID = "cutline";
+
+  function setStatus(t) { $("status").textContent = t || ""; }
+
+  // ---------- storage (shared through the Worker API) ----------
+  function newId() { return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function call(path, opt) {
+    return fetch(API + path, opt).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function adopt(d) {
+    if (d.unchanged) return;
+    rev = d.rev; items = d.items; render();
+  }
+  function load() {
+    if (pending || drag) return Promise.resolve();
+    return call("/list?rev=" + rev).then(function (d) {
+      if (pending || drag) return;
+      adopt(d); setStatus("Saved and shared");
+    }).catch(function () { setStatus("Can't reach the list. Retrying…"); });
+  }
+  function send(ops) {
+    pending++;
+    return call("/ops", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ops: ops }) })
+      .then(function (d) { pending--; if (!pending) { adopt(d); setStatus("Saved and shared"); } })
+      .catch(function () { pending--; rev = -1; setStatus("Could not save. Reloading the list…"); load(); });
+  }
+
+  function save(item) {
+    var i = items.findIndex(function (x) { return x.id === item.id; });
+    if (i >= 0) items[i] = item; else items.push(item);
+    render();
+    return send([{ op: "set", item: item }]);
+  }
+  function remove(id) {
+    items = items.filter(function (x) { return x.id !== id; });
+    render();
+    return send([{ op: "delete", id: id }]);
+  }
+
+  // ---------- ranking ----------
+  function isLine(x) { return x.kind === "line"; }
+  function realItems() { return items.filter(function (x) { return !isLine(x); }); }
+  // Items saved before ranking existed fall back to their priority, then creation time.
+  function rankOf(it) { return it.rank != null ? Number(it.rank) : (Number(it.priority) || 2) * 1e6 + (Number(it.created) || 0) / 1e9; }
+  // Every entry in rank order, including the buying line. Until the line is first moved it sits at the top.
+  function sorted() {
+    var ln = items.find(isLine) || { id: LINE_ID, kind: "line", rank: -1e9 };
+    return realItems().concat([ln]).sort(function (a, b) { return rankOf(a) - rankOf(b) || String(a.id).localeCompare(String(b.id)); });
+  }
+  function bottomRank() { return sorted().reduce(function (m, i) { return Math.max(m, rankOf(i)); }, 0) + 1; }
+  // Items above the line are the ones to buy.
+  function buying() {
+    var out = [];
+    for (var e of sorted()) { if (isLine(e)) break; out.push(e); }
+    return out;
+  }
+
+  // Put `item` between `prev` and `next` (either may be null) in rank order.
+  function placeBetween(item, prev, next) {
+    var r;
+    if (prev && next) r = (rankOf(prev) + rankOf(next)) / 2;
+    else if (next) r = rankOf(next) - 1;
+    else if (prev) r = rankOf(prev) + 1;
+    else r = 1;
+    if (r === rankOf(item) && item.rank != null) return;
+    save(Object.assign({}, item, { rank: r }));
+  }
+
+  function moveBy(it, delta) {
+    var list = sorted(), idx = list.findIndex(function (x) { return x.id === it.id; }), to = idx + delta;
+    if (idx < 0 || to < 0 || to >= list.length) return;
+    var rest = list.filter(function (x) { return x.id !== it.id; });
+    placeBetween(it, rest[to - 1] || null, rest[to] || null);
+  }
+
+  // ---------- render ----------
+  function lineTotal(it) { return (Number(it.price) || 0) * (Number(it.qty) || 1); }
+  function sum(arr) { return arr.reduce(function (s, i) { return s + lineTotal(i); }, 0); }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function render() {
+    if (drag) return;       // never rebuild the list under a drag in progress
+    var buy = buying(), real = realItems();
+    $("tBuy").textContent = fmt.format(sum(buy));
+    $("tCount").textContent = buy.length + (buy.length === 1 ? " item" : " items");
+    $("tAll").textContent = fmt.format(sum(real));
+
+    var root = $("list"); root.textContent = "";
+    if (!real.length) {
+      var e = el("div", "empty", "Nothing on your list yet. Add your first item above.");
+      e.appendChild(document.createElement("br"));
+      var b = el("button", "", "Load example items"); b.type = "button";
+      b.addEventListener("click", loadExamples); e.appendChild(b);
+      root.appendChild(e); return;
+    }
+
+    var ids = {}; buy.forEach(function (i) { ids[i.id] = true; });
+    var list = sorted(), n = 0, ul = el("ul");
+    list.forEach(function (it, idx) {
+      if (isLine(it)) { ul.appendChild(lineRow(it, buy, idx === 0, idx === list.length - 1)); return; }
+      n += 1;
+      ul.appendChild(row(it, n, !!ids[it.id], idx === 0, idx === list.length - 1));
+    });
+    root.appendChild(ul);
+  }
+
+  function handleBtn(label) {
+    var h = el("button", "handle"); h.type = "button"; h.innerHTML = GRIP;
+    h.setAttribute("aria-label", label); h.title = "Drag to reorder";
+    return h;
+  }
+  function moveBtns(it, isFirst, isLast, name) {
+    var up = el("button", "ghost", "↑ Up"); up.type = "button"; up.disabled = isFirst; up.setAttribute("aria-label", "Move " + name + " up");
+    up.addEventListener("click", function () { moveBy(it, -1); });
+    var dn = el("button", "ghost", "↓ Down"); dn.type = "button"; dn.disabled = isLast; dn.setAttribute("aria-label", "Move " + name + " down");
+    dn.addEventListener("click", function () { moveBy(it, 1); });
+    return [up, dn];
+  }
+
+  function lineRow(ln, buy, isFirst, isLast) {
+    var li = el("li", "item cut"); li.dataset.id = ln.id;
+    var h = handleBtn("Drag the buying line"); h.addEventListener("pointerdown", function (ev) { startDrag(ev, li, ln); });
+    li.appendChild(h);
+    var lab = el("div", "cut-label");
+    if (buy.length) {
+      lab.textContent = "Buying line: " + buy.length + (buy.length === 1 ? " item above" : " items above") + " · " + fmt.format(sum(buy));
+      lab.appendChild(el("small", "", "Drag the line to change what you buy."));
+    } else {
+      lab.textContent = "Buying line";
+      lab.appendChild(el("small", "", "Drag this line below the items you will buy."));
+    }
+    li.appendChild(lab);
+    var ra = el("div"); ra.style.display = "flex";
+    moveBtns(ln, isFirst, isLast, "the buying line").forEach(function (b) { ra.appendChild(b); });
+    li.appendChild(ra);
+    return li;
+  }
+
+  function row(it, position, on, isFirst, isLast) {
+    var li = el("li", "item" + (on ? " on" : "")); li.dataset.id = it.id;
+    var h = handleBtn("Drag to rank " + it.name); h.addEventListener("pointerdown", function (ev) { startDrag(ev, li, it); });
+    li.appendChild(h);
+
+    var nm = el("div", "name"); nm.appendChild(el("span", "rank", "#" + position)); nm.appendChild(document.createTextNode(it.name));
+    li.appendChild(nm);
+
+    var pr = el("div", "price", it.price !== "" && it.price != null ? fmt.format(lineTotal(it)) : "No price");
+    if (Number(it.qty) > 1) pr.appendChild(el("small", "", Number(it.qty) + " × " + fmt.format(Number(it.price) || 0)));
+    li.appendChild(pr);
+
+    var meta = el("div", "meta"), u = safeUrl(it.url), bits = [];
+    if (it.store) bits.push(it.store);
+    if (u) {
+      if (it.store) meta.appendChild(document.createTextNode(it.store + " · "));
+      var a = el("a", "", "Open link"); a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; meta.appendChild(a);
+      if (it.notes) meta.appendChild(document.createTextNode(" · " + it.notes));
+    } else {
+      if (it.notes) bits.push(it.notes);
+      meta.textContent = bits.join(" · ");
+    }
+    if (meta.textContent) li.appendChild(meta);
+
+    var ra = el("div", "row-actions");
+    moveBtns(it, isFirst, isLast, it.name).forEach(function (b) { ra.appendChild(b); });
+    var eb = el("button", "ghost", "Edit"); eb.type = "button"; eb.addEventListener("click", function () { startEdit(it); });
+    var db = el("button", "ghost del", "Delete"); db.type = "button";
+    db.addEventListener("click", function () {
+      if (db.dataset.sure) { remove(it.id); return; }
+      db.dataset.sure = "1"; db.textContent = "Tap again to delete";
+      setTimeout(function () { delete db.dataset.sure; db.textContent = "Delete"; }, 3000);
+    });
+    ra.appendChild(eb); ra.appendChild(db); li.appendChild(ra);
+    return li;
+  }
+
+  // ---------- drag to rank ----------
+  function startDrag(ev, li, it) {
+    if (ev.button != null && ev.button !== 0) return;
+    ev.preventDefault();
+    var handle = ev.currentTarget;
+    try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+    drag = { li: li, item: it, startY: ev.clientY, handle: handle, pid: ev.pointerId, target: null, after: false, raf: 0, lastY: ev.clientY, scrollStart: window.scrollY };
+    li.classList.add("dragging");
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onEnd);
+    handle.addEventListener("pointercancel", onCancel);
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+  function others() { return Array.prototype.filter.call($("list").querySelectorAll("li.item"), function (n) { return n !== drag.li; }); }
+  function onMove(ev) { if (!drag) return; drag.lastY = ev.clientY; updateDrag(); }
+  function updateDrag() {
+    var dy = drag.lastY - drag.startY + (window.scrollY - drag.scrollStart);
+    drag.li.style.transform = "translateY(" + dy + "px)";
+    var list = others(), y = drag.lastY, target = null, after = false;
+    list.forEach(function (n) { n.classList.remove("drop-before", "drop-after"); });
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) { target = list[i]; break; }
+    }
+    if (!target && list.length) { target = list[list.length - 1]; after = true; }
+    if (target) target.classList.add(after ? "drop-after" : "drop-before");
+    drag.target = target; drag.after = after;
+  }
+  function autoScroll() {
+    if (!drag) return;
+    var y = drag.lastY, h = window.innerHeight, edge = 70;
+    if (y < edge) window.scrollBy(0, -Math.ceil((edge - y) / 5));
+    else if (y > h - edge) window.scrollBy(0, Math.ceil((y - (h - edge)) / 5));
+    updateDrag();
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+  function endDrag() {
+    var d = drag; if (!d) return null;
+    cancelAnimationFrame(d.raf);
+    d.handle.removeEventListener("pointermove", onMove);
+    d.handle.removeEventListener("pointerup", onEnd);
+    d.handle.removeEventListener("pointercancel", onCancel);
+    try { d.handle.releasePointerCapture(d.pid); } catch (e) {}
+    drag = null;
+    return d;
+  }
+  function onEnd() {
+    var d = endDrag(); if (!d) return;
+    var list = sorted().filter(function (x) { return x.id !== d.item.id; });
+    var prev = null, next = null;
+    if (d.target) {
+      var ti = list.findIndex(function (x) { return x.id === d.target.dataset.id; });
+      if (d.after) { prev = list[ti]; next = list[ti + 1] || null; }
+      else { prev = list[ti - 1] || null; next = list[ti]; }
+    }
+    render();
+    if (d.target) placeBetween(d.item, prev, next);
+  }
+  function onCancel() { endDrag(); render(); }
+
+  // ---------- form ----------
+  function startEdit(it) {
+    editingId = it.id;
+    $("fName").value = it.name; $("fPrice").value = it.price; $("fQty").value = it.qty || 1;
+    $("fStore").value = it.store || ""; $("fUrl").value = it.url || ""; $("fNotes").value = it.notes || "";
+    $("fSubmit").textContent = "Save changes"; $("fCancel").hidden = false;
+    $("form").scrollIntoView({ behavior: "smooth", block: "center" }); $("fName").focus();
+  }
+  function resetForm() {
+    editingId = null; $("form").reset(); $("fQty").value = 1;
+    $("fSubmit").textContent = "Add to bottom of list"; $("fCancel").hidden = true;
+  }
+  $("fCancel").addEventListener("click", resetForm);
+  $("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var name = $("fName").value.trim(); if (!name) return;
+    var existing = editingId && items.find(function (x) { return x.id === editingId; });
+    var price = $("fPrice").value;
+    var item = {
+      id: editingId || newId(), name: name,
+      price: price === "" ? "" : Math.max(0, Number(price)),
+      qty: Math.max(1, Math.floor(Number($("fQty").value) || 1)),
+      store: $("fStore").value.trim(), url: $("fUrl").value.trim(), notes: $("fNotes").value.trim(),
+      rank: existing ? rankOf(existing) : bottomRank(),
+      created: existing ? existing.created : Date.now()
+    };
+    save(item).then(function () { resetForm(); $("fName").focus(); });
+  });
+
+  function loadExamples() {
+    var base = bottomRank();
+    [["Example: Standing desk", 649, 1, "Officeworks"], ["Example: USB-C hub", 79.95, 1, "JB Hi-Fi"], ["Example: Bike lights", 34, 2, "Amazon"]]
+      .forEach(function (e, n) {
+        save({ id: newId(), name: e[0], price: e[1], qty: e[2], store: e[3], url: "", notes: "Delete me", rank: base + n, created: Date.now() + n });
+      });
+    save({ id: LINE_ID, kind: "line", rank: base + 0.5 });   // line starts under the first example
+  }
+
+  // ---------- boot ----------
+  render();
+  load();
+  setInterval(load, 8000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) load(); });
+})();
+</script>
+</body>
+</html>

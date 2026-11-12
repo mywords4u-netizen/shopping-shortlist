@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build worker.js
+        run: npm run build
+      - name: Check worker.js is up to date with src/
+        run: |
+          if ! git diff --exit-code -- worker.js; then
+            echo "::error file=worker.js::worker.js is out of date. Run 'npm run build' and commit worker.js."
+            exit 1
+          fi
+      - name: Run tests
+        run: node --test
