@@ -81,11 +81,10 @@ li.item {
 }
 li.item.on { border-color: var(--accent); background: var(--accent-soft); }
 li.item.dragging { z-index: 20; box-shadow: var(--shadow); opacity: .96; pointer-events: none; }
-li.item.drop-before::before, li.item.drop-after::after {
-  content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--accent);
+ul.sorting li.item:not(.dragging) { will-change: transform; }
+@media (prefers-reduced-motion: no-preference) {
+  ul.sorting li.item:not(.dragging) { transition: transform .18s ease, background .15s, border-color .15s; }
 }
-li.item.drop-before::before { top: -6px; }
-li.item.drop-after::after { bottom: -6px; }
 li.item.cut {
   background: var(--accent); color: var(--accent-fg); border-color: var(--accent); padding-block: 8px;
   grid-template-columns: 36px 1fr auto;
@@ -349,27 +348,40 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
     ev.preventDefault();
     var handle = ev.currentTarget;
     try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
-    drag = { li: li, item: it, startY: ev.clientY, handle: handle, pid: ev.pointerId, target: null, after: false, raf: 0, lastY: ev.clientY, scrollStart: window.scrollY };
+    // Measure every card once, before anything moves. The dragged card keeps its slot in the flow;
+    // the others slide by one card height to open a gap where the drop will land.
+    var ul = li.parentNode, cards = Array.prototype.slice.call(ul.querySelectorAll("li.item"));
+    var d = cards.indexOf(li), top = li.getBoundingClientRect().top + window.scrollY;
+    var gap = parseFloat(getComputedStyle(ul).rowGap) || 0;
+    drag = {
+      li: li, item: it, startY: ev.clientY, handle: handle, pid: ev.pointerId, raf: 0, lastY: ev.clientY, scrollStart: window.scrollY,
+      ul: ul, d: d, k: d, docTop: top, h: li.offsetHeight, shift: li.offsetHeight + gap,
+      others: cards.filter(function (c) { return c !== li; }).map(function (c) {
+        var r = c.getBoundingClientRect(); return { li: c, mid: r.top + window.scrollY + r.height / 2 };
+      })
+    };
+    ul.classList.add("sorting");
     li.classList.add("dragging");
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onEnd);
     handle.addEventListener("pointercancel", onCancel);
     drag.raf = requestAnimationFrame(autoScroll);
   }
-  function others() { return Array.prototype.filter.call($("list").querySelectorAll("li.item"), function (n) { return n !== drag.li; }); }
   function onMove(ev) { if (!drag) return; drag.lastY = ev.clientY; updateDrag(); }
   function updateDrag() {
     var dy = drag.lastY - drag.startY + (window.scrollY - drag.scrollStart);
     drag.li.style.transform = "translateY(" + dy + "px)";
-    var list = others(), y = drag.lastY, target = null, after = false;
-    list.forEach(function (n) { n.classList.remove("drop-before", "drop-after"); });
-    for (var i = 0; i < list.length; i++) {
-      var r = list[i].getBoundingClientRect();
-      if (y < r.top + r.height / 2) { target = list[i]; break; }
-    }
-    if (!target && list.length) { target = list[list.length - 1]; after = true; }
-    if (target) target.classList.add(after ? "drop-after" : "drop-before");
-    drag.target = target; drag.after = after;
+    // k = how many of the other cards sit above the middle of the dragged card = its new position.
+    var center = drag.docTop + drag.h / 2 + dy, k = 0;
+    drag.others.forEach(function (o) { if (o.mid < center) k++; });
+    if (k === drag.k) return;
+    drag.k = k;
+    drag.others.forEach(function (o, i) {
+      var move = 0;
+      if (i >= drag.d && i < k) move = -drag.shift;        // dragged card left from above: this one moves up
+      else if (i < drag.d && i >= k) move = drag.shift;    // dragged card lands above it: this one moves down
+      o.li.style.transform = move ? "translateY(" + move + "px)" : "";
+    });
   }
   function autoScroll() {
     if (!drag) return;
@@ -391,15 +403,11 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
   }
   function onEnd() {
     var d = endDrag(); if (!d) return;
+    d.ul.classList.remove("sorting");
+    // The cards on screen are in rank order, so the others (minus the dragged one) line up with this list.
     var list = sorted().filter(function (x) { return x.id !== d.item.id; });
-    var prev = null, next = null;
-    if (d.target) {
-      var ti = list.findIndex(function (x) { return x.id === d.target.dataset.id; });
-      if (d.after) { prev = list[ti]; next = list[ti + 1] || null; }
-      else { prev = list[ti - 1] || null; next = list[ti]; }
-    }
     render();
-    if (d.target) placeBetween(d.item, prev, next);
+    if (d.k !== d.d) placeBetween(d.item, list[d.k - 1] || null, list[d.k] || null);
   }
   function onCancel() { endDrag(); render(); }
 
