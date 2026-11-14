@@ -81,11 +81,7 @@ li.item {
 }
 li.item.on { border-color: var(--accent); background: var(--accent-soft); }
 li.item.dragging { z-index: 20; box-shadow: var(--shadow); opacity: .96; pointer-events: none; }
-li.item.drop-before::before, li.item.drop-after::after {
-  content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--accent);
-}
-li.item.drop-before::before { top: -6px; }
-li.item.drop-after::after { bottom: -6px; }
+#list.sorting li.item:not(.dragging) { transition: transform .15s ease; }
 li.item.cut {
   background: var(--accent); color: var(--accent-fg); border-color: var(--accent); padding-block: 8px;
   grid-template-columns: 36px 1fr auto;
@@ -351,6 +347,7 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
     try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
     drag = { li: li, item: it, startY: ev.clientY, handle: handle, pid: ev.pointerId, target: null, after: false, raf: 0, lastY: ev.clientY, scrollStart: window.scrollY };
     li.classList.add("dragging");
+    $("list").classList.add("sorting");
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onEnd);
     handle.addEventListener("pointercancel", onCancel);
@@ -361,14 +358,23 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
   function updateDrag() {
     var dy = drag.lastY - drag.startY + (window.scrollY - drag.scrollStart);
     drag.li.style.transform = "translateY(" + dy + "px)";
-    var list = others(), y = drag.lastY, target = null, after = false;
-    list.forEach(function (n) { n.classList.remove("drop-before", "drop-after"); });
+    var list = others(), y = drag.lastY, target = null, after = false, gap = 8;
+    var oi = 0, ti, shift = drag.li.offsetHeight + gap;
+    list.forEach(function (n) { if (n.compareDocumentPosition(drag.li) & Node.DOCUMENT_POSITION_FOLLOWING) oi++; });
     for (var i = 0; i < list.length; i++) {
       var r = list[i].getBoundingClientRect();
-      if (y < r.top + r.height / 2) { target = list[i]; break; }
+      var natural = r.top - (list[i]._shift || 0);   // position ignoring the live shift, so hit-testing doesn't jitter
+      if (y < natural + r.height / 2) { target = list[i]; break; }
     }
     if (!target && list.length) { target = list[list.length - 1]; after = true; }
-    if (target) target.classList.add(after ? "drop-after" : "drop-before");
+    ti = target ? list.indexOf(target) + (after ? 1 : 0) : oi;
+    list.forEach(function (n, j) {
+      var s = 0;
+      if (j >= ti && j < oi) s = shift;        // dragged card moves up past this one: it slides down
+      else if (j >= oi && j < ti) s = -shift;  // dragged card moves down past this one: it slides up
+      n._shift = s;
+      n.style.transform = s ? "translateY(" + s + "px)" : "";
+    });
     drag.target = target; drag.after = after;
   }
   function autoScroll() {
@@ -386,6 +392,7 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
     d.handle.removeEventListener("pointerup", onEnd);
     d.handle.removeEventListener("pointercancel", onCancel);
     try { d.handle.releasePointerCapture(d.pid); } catch (e) {}
+    $("list").classList.remove("sorting");
     drag = null;
     return d;
   }
