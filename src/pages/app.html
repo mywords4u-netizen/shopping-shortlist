@@ -363,7 +363,9 @@ li.item.cut button.ghost:hover { background: rgba(255, 255, 255, .18); color: va
     list.forEach(function (n) { if (n.compareDocumentPosition(drag.li) & Node.DOCUMENT_POSITION_FOLLOWING) oi++; });
     for (var i = 0; i < list.length; i++) {
       var r = list[i].getBoundingClientRect();
-      var natural = r.top - (list[i]._shift || 0);   // position ignoring the live shift, so hit-testing doesn't jitter
+      // Layout position ignoring the shift. Read the transform as currently rendered (mid-transition),
+      // not the target shift, otherwise the hit-test flips back and forth while cards animate and they rattle.
+      var natural = r.top - new DOMMatrix(getComputedStyle(list[i]).transform).m42;
       if (y < natural + r.height / 2) { target = list[i]; break; }
     }
     if (!target && list.length) { target = list[list.length - 1]; after = true; }
