@@ -4,5 +4,12 @@
   "compatibility_date": "2026-10-01",
   "kv_namespaces": [
     { "binding": "KV", "id": "56db7d83b1eb443b858ad95c61072739" }
-  ]
+  ],
+  // Branch builds (Workers Builds runs `wrangler preview`) use their own KV store so a preview never touches the real list.
+  // No id here: Cloudflare creates the preview store on first use.
+  "previews": {
+    "kv_namespaces": [
+      { "binding": "KV" }
+    ]
+  }
 }
